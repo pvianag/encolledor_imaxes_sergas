@@ -11,7 +11,8 @@ keywords = ["dicom", "sergas", "zip", "weasis"]
 categories = ["multimedia", "gui"]
 
 [dependencies]
-eframe = { version = "0.31", default-features = true, features = ["default_fonts", "glow"] }
+# glow: Linux/macOS. wgpu: Windows (DX12) — OpenGL 2.0+ is often missing under RDP/VMs/basic GPUs.
+eframe = { version = "0.31", default-features = true, features = ["default_fonts", "glow", "wgpu"] }
 egui = "0.31"
 rfd = "0.15"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }

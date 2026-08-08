@@ -120,6 +120,12 @@ fn run() -> eframe::Result<()> {
 
     let options = eframe::NativeOptions {
         viewport,
+        // Windows: prefer wgpu → DirectX 12. glow needs OpenGL 2.0+, which often fails
+        // under RDP, VMs, and machines without a working GL driver stack.
+        #[cfg(windows)]
+        renderer: eframe::Renderer::Wgpu,
+        #[cfg(not(windows))]
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
 
@@ -134,7 +140,7 @@ fn main() {
     install_panic_hook();
     if let Err(err) = run() {
         report_fatal(&format!(
-            "The application failed to start.\n\n{err}\n\nIf this persists, check that your GPU/OpenGL drivers are working, and that Microsoft Defender did not quarantine the file."
+            "The application failed to start.\n\n{err}\n\nIf this persists, check that your GPU drivers are working, and that Microsoft Defender did not quarantine the file."
         ));
         std::process::exit(1);
     }

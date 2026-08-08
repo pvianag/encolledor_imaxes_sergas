@@ -13,7 +13,7 @@
 
 O workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) publica os executábeis oficiais.
 
-> **Por que MSVC en Windows?** O binario `x86_64-pc-windows-gnu` cruzado con Zig/mingw pode fallar ao arrancar apps GUI (eframe/OpenGL) sen amosar erro. O build nativo MSVC é o que deben descargar os usuarios.
+> **Por que MSVC en Windows?** O binario `x86_64-pc-windows-gnu` cruzado con Zig/mingw pode fallar ao arrancar apps GUI (eframe) sen amosar erro. O build nativo MSVC é o que deben descargar os usuarios.
 
 ## Que descargan os usuarios
 
@@ -40,6 +40,8 @@ Se a app “non fai nada”, mira:
 1. `%TEMP%\sergas-zip-shrinker-crash.log` (creado se hai panic/erro de arranque)
 2. Un diálogo de erro (MessageBox) se o fallo chega ao código Rust
 3. Historial de Microsoft Defender (pode poñer en corentena o `.exe`)
+
+O binario de Windows usa o renderizador **wgpu (DirectX 12)**, non OpenGL. Se ves `egui_glow requires opengl 2.0+`, estás cunha release antiga; actualiza á última.
 
 ## Nota sobre glibc (Linux)
 
