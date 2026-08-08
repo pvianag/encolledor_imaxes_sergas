@@ -22,7 +22,7 @@ cargo zigbuild --release --locked --bin sergas-zip-shrinker \
   --target x86_64-pc-windows-gnu
 ```
 
-macOS compílase só en runners nativos de GitHub (`macos-13` / `macos-14`) co mesmo Rust e `Cargo.lock`.
+macOS compílase só en runners nativos de GitHub (`macos-15-intel` / `macos-15`) co mesmo Rust e `Cargo.lock`.
 
 ## Que descargan os usuarios
 
@@ -32,8 +32,8 @@ macOS compílase só en runners nativos de GitHub (`macos-13` / `macos-14`) co m
 |---|---|---|
 | Linux x86_64 | `sergas-zip-shrinker-linux-x86_64` | Ubuntu 22.04 + Rust 1.97.1 |
 | Windows x86_64 | `sergas-zip-shrinker-windows-x86_64.exe` | Zig 0.13 + windows-gnu |
-| macOS Intel | `sergas-zip-shrinker-macos-x86_64` | macos-13 |
-| macOS Apple Silicon | `sergas-zip-shrinker-macos-aarch64` | macos-14 |
+| macOS Intel | `sergas-zip-shrinker-macos-x86_64` | macos-15-intel |
+| macOS Apple Silicon | `sergas-zip-shrinker-macos-aarch64` | macos-15 |
 
 ## Publicar
 

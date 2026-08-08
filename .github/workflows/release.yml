@@ -126,10 +126,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
+          # macos-13 was retired; macos-15-intel is GitHub's x86_64 replacement
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             artifact: sergas-zip-shrinker-macos-x86_64
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
             artifact: sergas-zip-shrinker-macos-aarch64
     steps:
