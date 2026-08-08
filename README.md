@@ -35,7 +35,7 @@ Descarga **só o executábel** da túa plataforma (sen instalador). Os binarios 
 | macOS Apple Silicon | [sergas-zip-shrinker-macos-aarch64](https://github.com/pvianag/encolledor_imaxes_sergas/releases/latest/download/sergas-zip-shrinker-macos-aarch64) |
 
 - **Linux:** `chmod +x sergas-zip-shrinker-linux-x86_64 && ./sergas-zip-shrinker-linux-x86_64`
-- **Windows:** executar o `.exe`
+- **Windows:** executar o `.exe`. Se SmartScreen avisa, usa *Máis información → Executar de todas formas*. Se “non fai nada”, comproba Defender (corentena) e o ficheiro `%TEMP%\sergas-zip-shrinker-crash.log`.
 - **macOS:** `chmod +x` e abrir; se o sistema o bloquea, permite a app en *Seguridade e privacidade*
 
 Todas as versións: [Releases](https://github.com/pvianag/encolledor_imaxes_sergas/releases).
@@ -71,11 +71,11 @@ cargo run --release
 ### Publicar unha release (compilación automática multi-OS)
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
-O workflow `Release` usa o **mesmo toolchain** que en local (Rust **1.97.1**, `Cargo.lock`, Zig **0.13** + `cargo-zigbuild` para Windows). Detalles en [`DISTRIBUTION.md`](DISTRIBUTION.md).
+O workflow `Release` usa Rust **1.97.1** + `Cargo.lock`; Windows constrúese en `windows-latest` (MSVC). Detalles en [`DISTRIBUTION.md`](DISTRIBUTION.md).
 
 Configuración local: `imaxes_diag_shrinker.cfg` no cartafol de configuración do usuario.
 

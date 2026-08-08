@@ -7,12 +7,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  ZIG_VERSION: "0.13.0"
-  CARGO_ZIGBUILD_VERSION: "0.23.0"
 
 jobs:
-  test-and-build:
-    name: Test + Linux/Windows build (dev parity)
+  test-and-build-linux:
+    name: Test + Linux build
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -24,32 +22,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev \
-            libxcb-xfixes0-dev libxkbcommon-dev libssl-dev pkg-config \
-            curl xz-utils
+            libxcb-xfixes0-dev libxkbcommon-dev libssl-dev pkg-config
 
       - name: Install Rust 1.97.1
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.97.1"
-          targets: x86_64-pc-windows-gnu
-
-      - name: Install Zig ${{ env.ZIG_VERSION }}
-        run: |
-          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
-            -o /tmp/zig.tar.xz
-          sudo tar -xJf /tmp/zig.tar.xz -C /opt
-          echo "/opt/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
-
-      - name: Install cargo-zigbuild
-        run: cargo install cargo-zigbuild --locked --version "${CARGO_ZIGBUILD_VERSION}"
 
       - name: Test
         run: cargo test --locked
 
-      - name: Build Linux (same as package-all.sh)
+      - name: Build Linux
         run: cargo build --release --locked --bin sergas-zip-shrinker
 
-      - name: Build Windows gnu via zigbuild (same as package-all.sh)
-        run: |
-          cargo zigbuild --release --locked --bin sergas-zip-shrinker \
-            --target x86_64-pc-windows-gnu
+  build-windows:
+    name: Windows MSVC build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust 1.97.1
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.1"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build Windows
+        shell: pwsh
+        run: cargo build --release --locked --bin sergas-zip-shrinker --target x86_64-pc-windows-msvc
