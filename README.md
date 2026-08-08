@@ -21,6 +21,10 @@ O resultado é un ZIP máis pequeno con só o contido DICOM, apto para abrilo en
 
 > **Non oficial.** Este proxecto **non está afiliado** ao SERGAS nin a e-Saúde. Os nomes e marcas citados pertencen aos seus respectivos titulares.
 
+<p align="center">
+  <img src="assets/screenshot-ui.png" alt="Sergas ZIP Shrinker — interface" width="420" />
+</p>
+
 ## Descarga (usuarios)
 
 **[→ Ir á última release](https://github.com/pvianag/encolledor_imaxes_sergas/releases/latest)**

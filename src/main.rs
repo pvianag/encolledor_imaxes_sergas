@@ -107,7 +107,21 @@ fn install_panic_hook() {
     }));
 }
 
-fn run() -> eframe::Result<()> {
+fn run_with(renderer: eframe::Renderer, viewport: egui::ViewportBuilder) -> eframe::Result<()> {
+    let options = eframe::NativeOptions {
+        viewport,
+        renderer,
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "Sergas ZIP Shrinker",
+        options,
+        Box::new(|cc| Ok(Box::new(ShrinkApp::new(cc)))),
+    )
+}
+
+fn run() -> Result<(), String> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([860.0, 780.0])
         .with_min_inner_size([720.0, 640.0])
@@ -118,22 +132,28 @@ fn run() -> eframe::Result<()> {
         viewport = viewport.with_icon(icon);
     }
 
-    let options = eframe::NativeOptions {
-        viewport,
-        // Windows: prefer wgpu → DirectX 12. glow needs OpenGL 2.0+, which often fails
-        // under RDP, VMs, and machines without a working GL driver stack.
-        #[cfg(windows)]
-        renderer: eframe::Renderer::Wgpu,
-        #[cfg(not(windows))]
-        renderer: eframe::Renderer::Glow,
-        ..Default::default()
-    };
+    // Windows: prefer wgpu → DirectX 12 (OpenGL via glow often missing under RDP/VMs).
+    // Fall back to glow if wgpu cannot find an adapter.
+    #[cfg(windows)]
+    {
+        match run_with(eframe::Renderer::Wgpu, viewport.clone()) {
+            Ok(()) => return Ok(()),
+            Err(wgpu_err) => {
+                eprintln!("wgpu startup failed ({wgpu_err}); retrying with OpenGL (glow)…");
+                match run_with(eframe::Renderer::Glow, viewport) {
+                    Ok(()) => return Ok(()),
+                    Err(glow_err) => {
+                        return Err(format!("wgpu: {wgpu_err}\nglow: {glow_err}"));
+                    }
+                }
+            }
+        }
+    }
 
-    eframe::run_native(
-        "Sergas ZIP Shrinker",
-        options,
-        Box::new(|cc| Ok(Box::new(ShrinkApp::new(cc)))),
-    )
+    #[cfg(not(windows))]
+    {
+        run_with(eframe::Renderer::Glow, viewport).map_err(|e| e.to_string())
+    }
 }
 
 fn main() {

@@ -12,8 +12,10 @@ categories = ["multimedia", "gui"]
 
 [dependencies]
 # glow: Linux/macOS. wgpu: Windows (DX12) — OpenGL 2.0+ is often missing under RDP/VMs/basic GPUs.
+# Explicit wgpu defaults: eframe disables them, which leaves Windows without DX12 and fails adapter creation.
 eframe = { version = "0.31", default-features = true, features = ["default_fonts", "glow", "wgpu"] }
 egui = "0.31"
+wgpu = { version = "24", default-features = true }
 rfd = "0.15"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 serde = { version = "1", features = ["derive"] }
