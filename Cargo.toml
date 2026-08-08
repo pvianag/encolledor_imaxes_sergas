@@ -1,6 +1,6 @@
 [package]
 name = "sergas-zip-shrinker"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 description = "Reduce Sergas e-Saúde Alma3D ZIP downloads to DICOM-only for Weasis and similar viewers"
 license = "GPL-3.0-or-later"
@@ -11,8 +11,11 @@ keywords = ["dicom", "sergas", "zip", "weasis"]
 categories = ["multimedia", "gui"]
 
 [dependencies]
-eframe = { version = "0.31", default-features = true, features = ["default_fonts", "glow"] }
+# glow: Linux/macOS. wgpu: Windows (DX12) — OpenGL 2.0+ is often missing under RDP/VMs/basic GPUs.
+# Explicit wgpu defaults: eframe disables them, which leaves Windows without DX12 and fails adapter creation.
+eframe = { version = "0.31", default-features = true, features = ["default_fonts", "glow", "wgpu"] }
 egui = "0.31"
+wgpu = { version = "24", default-features = true }
 rfd = "0.15"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 serde = { version = "1", features = ["derive"] }

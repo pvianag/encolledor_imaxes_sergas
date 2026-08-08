@@ -107,19 +107,10 @@ fn install_panic_hook() {
     }));
 }
 
-fn run() -> eframe::Result<()> {
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([860.0, 780.0])
-        .with_min_inner_size([720.0, 640.0])
-        .with_title("Sergas ZIP Shrinker")
-        .with_drag_and_drop(true);
-
-    if let Some(icon) = load_app_icon() {
-        viewport = viewport.with_icon(icon);
-    }
-
+fn run_with(renderer: eframe::Renderer, viewport: egui::ViewportBuilder) -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport,
+        renderer,
         ..Default::default()
     };
 
@@ -130,11 +121,46 @@ fn run() -> eframe::Result<()> {
     )
 }
 
+fn run() -> Result<(), String> {
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([860.0, 780.0])
+        .with_min_inner_size([720.0, 640.0])
+        .with_title("Sergas ZIP Shrinker")
+        .with_drag_and_drop(true);
+
+    if let Some(icon) = load_app_icon() {
+        viewport = viewport.with_icon(icon);
+    }
+
+    // Windows: prefer wgpu → DirectX 12 (OpenGL via glow often missing under RDP/VMs).
+    // Fall back to glow if wgpu cannot find an adapter.
+    #[cfg(windows)]
+    {
+        match run_with(eframe::Renderer::Wgpu, viewport.clone()) {
+            Ok(()) => return Ok(()),
+            Err(wgpu_err) => {
+                eprintln!("wgpu startup failed ({wgpu_err}); retrying with OpenGL (glow)…");
+                match run_with(eframe::Renderer::Glow, viewport) {
+                    Ok(()) => return Ok(()),
+                    Err(glow_err) => {
+                        return Err(format!("wgpu: {wgpu_err}\nglow: {glow_err}"));
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        run_with(eframe::Renderer::Glow, viewport).map_err(|e| e.to_string())
+    }
+}
+
 fn main() {
     install_panic_hook();
     if let Err(err) = run() {
         report_fatal(&format!(
-            "The application failed to start.\n\n{err}\n\nIf this persists, check that your GPU/OpenGL drivers are working, and that Microsoft Defender did not quarantine the file."
+            "The application failed to start.\n\n{err}\n\nIf this persists, check that your GPU drivers are working, and that Microsoft Defender did not quarantine the file."
         ));
         std::process::exit(1);
     }
