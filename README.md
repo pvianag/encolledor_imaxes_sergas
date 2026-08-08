@@ -38,7 +38,7 @@ Para abrir os estudos médicos do ZIP reducido, recoméndase [**Weasis**](https:
 
 ## Descarga (usuarios)
 
-Na páxina de **[Releases](../../releases)** descarga **só o executábel** da túa plataforma. Sen instalador.
+Na páxina de **[Releases](https://github.com/pvianag/encolledor_imaxes_sergas/releases)** descarga **só o executábel** da túa plataforma. Sen instalador.
 
 | Plataforma | Ficheiro |
 |---|---|
@@ -72,7 +72,7 @@ git tag v1.0.0 && git push origin v1.0.0
 
 Detalles en [`DISTRIBUTION.md`](DISTRIBUTION.md).
 
-Configuración local: `sergas_shrink.cfg` no cartafol de configuración do usuario.
+Configuración local: `imaxes_diag_shrinker.cfg` no cartafol de configuración do usuario.
 
 ## Privacidade no repositorio
 

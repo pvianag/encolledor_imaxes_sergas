@@ -2806,6 +2806,7 @@ dependencies = [
  "rfd",
  "serde",
  "toml 0.8.23",
+ "webbrowser",
  "winres",
  "zip",
 ]

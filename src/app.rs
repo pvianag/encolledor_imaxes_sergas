@@ -1,3 +1,4 @@
+use crate::about;
 use crate::config::AppConfig;
 use crate::i18n::{self, Lang, Strings};
 use crate::zip_ops::{analyze_zip, format_bytes, shrink_many, ProgressFn, ShrinkResult, ZipAnalysis};
@@ -61,6 +62,7 @@ pub struct ShrinkApp {
     sergas_logo: Option<TextureHandle>,
     radiography: Option<TextureHandle>,
     app_icon: Option<TextureHandle>,
+    show_about: bool,
 }
 
 impl ShrinkApp {
@@ -88,6 +90,7 @@ impl ShrinkApp {
             sergas_logo,
             radiography,
             app_icon,
+            show_about: false,
         }
     }
 
@@ -389,6 +392,17 @@ impl eframe::App for ShrinkApp {
                             }
                         }
                         ui.label(RichText::new(t.language).color(muted));
+                        ui.add_space(6.0);
+                        if ui
+                            .add(
+                                egui::Button::new(RichText::new(t.about).color(accent))
+                                    .fill(accent_soft)
+                                    .corner_radius(CornerRadius::same(6)),
+                            )
+                            .clicked()
+                        {
+                            self.show_about = true;
+                        }
                     });
                 });
                 ui.label(RichText::new(t.disclaimer).size(12.0).color(muted));
@@ -675,10 +689,168 @@ impl eframe::App for ShrinkApp {
                 let _ = ui.allocate_response(ui.available_size(), Sense::hover());
             });
 
+        if self.show_about {
+            self.about_overlay(ctx, accent, accent_soft, panel, text, muted, ok);
+        }
+
         if matches!(self.phase, AppPhase::Working) || self.queue.iter().any(|q| q.analyzing) {
             ctx.request_repaint_after(std::time::Duration::from_millis(50));
         }
     }
+}
+
+impl ShrinkApp {
+    fn about_overlay(
+        &mut self,
+        ctx: &egui::Context,
+        accent: Color32,
+        accent_soft: Color32,
+        panel: Color32,
+        text: Color32,
+        muted: Color32,
+        ok: Color32,
+    ) {
+        let t = self.t();
+        let mut open = self.show_about;
+        let mut close = false;
+
+        egui::Area::new(egui::Id::new("about_dim"))
+            .fixed_pos(egui::pos2(0.0, 0.0))
+            .order(egui::Order::Foreground)
+            .interactable(true)
+            .show(ctx, |ui| {
+                let screen = ctx.screen_rect();
+                let response = ui.allocate_response(screen.size(), Sense::click());
+                ui.painter().rect_filled(
+                    screen,
+                    CornerRadius::ZERO,
+                    Color32::from_black_alpha(140),
+                );
+                if response.clicked() {
+                    close = true;
+                }
+            });
+
+        egui::Window::new(t.about)
+            .id(egui::Id::new("about_window"))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .order(egui::Order::Foreground)
+            .frame(
+                Frame::new()
+                    .fill(panel)
+                    .stroke(Stroke::new(1.0_f32, accent))
+                    .corner_radius(CornerRadius::same(14))
+                    .inner_margin(Margin::same(18))
+                    .shadow(egui::epaint::Shadow {
+                        offset: [0, 8],
+                        blur: 28,
+                        spread: 0,
+                        color: Color32::from_black_alpha(60),
+                    }),
+            )
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.set_min_width(420.0);
+
+                ui.horizontal(|ui| {
+                    if let Some(tex) = &self.app_icon {
+                        ui.add(
+                            egui::Image::new(tex)
+                                .fit_to_exact_size(Vec2::splat(56.0))
+                                .corner_radius(CornerRadius::same(12)),
+                        );
+                        ui.add_space(10.0);
+                    }
+                    ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new(about::APP_NAME)
+                                .size(20.0)
+                                .strong()
+                                .color(accent),
+                        );
+                        ui.label(RichText::new(t.disclaimer).size(12.0).color(muted));
+                    });
+                });
+
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                about_row(ui, t.about_version, about::VERSION, text, muted);
+                about_row(ui, t.about_tag, about::GIT_TAG, text, muted);
+                about_row(ui, t.about_release, about::GIT_DESCRIBE, text, muted);
+                about_row(
+                    ui,
+                    t.about_commit,
+                    &format!("{} ({})", about::GIT_COMMIT_SHORT, about::GIT_COMMIT),
+                    text,
+                    muted,
+                );
+
+                ui.add_space(6.0);
+                ui.label(RichText::new(t.about_project).small().color(muted));
+                if ui
+                    .link(RichText::new(about::GITHUB_URL).color(Color32::from_rgb(37, 99, 235)))
+                    .clicked()
+                {
+                    about::open_url(about::GITHUB_URL);
+                }
+
+                ui.add_space(12.0);
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(t.about_open_github).color(Color32::WHITE),
+                            )
+                            .fill(accent),
+                        )
+                        .clicked()
+                    {
+                        about::open_url(about::GITHUB_URL);
+                    }
+                    if ui
+                        .add(
+                            egui::Button::new(RichText::new(t.about_open_release).color(accent))
+                                .fill(accent_soft),
+                        )
+                        .clicked()
+                    {
+                        about::open_url(&about::release_url());
+                    }
+                    if ui
+                        .add(
+                            egui::Button::new(RichText::new(t.about_open_commit).color(accent))
+                                .fill(accent_soft),
+                        )
+                        .clicked()
+                    {
+                        about::open_url(&about::commit_url());
+                    }
+                });
+
+                ui.add_space(10.0);
+                ui.label(RichText::new(t.about_license).small().color(ok));
+                ui.add_space(8.0);
+                if ui.button(t.about_close).clicked() {
+                    close = true;
+                }
+            });
+
+        if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            open = false;
+        }
+        self.show_about = open;
+    }
+}
+
+fn about_row(ui: &mut egui::Ui, label: &str, value: &str, text: Color32, muted: Color32) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(format!("{label}:")).color(muted));
+        ui.label(RichText::new(value).color(text).strong());
+    });
 }
 
 struct SizeDiagramLabels {

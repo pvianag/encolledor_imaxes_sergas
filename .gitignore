@@ -16,6 +16,7 @@ property.xml
 *.partial
 
 # Local config / IDE
+imaxes_diag_shrinker.cfg
 sergas_shrink.cfg
 .idea/
 .vscode/
