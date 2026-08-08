@@ -68,8 +68,9 @@ pub struct ShrinkApp {
     radiography: Option<TextureHandle>,
     app_icon: Option<TextureHandle>,
     show_about: bool,
-    /// Grow the OS window once so default content fits without overlap.
+    /// Grow the OS window when content/phase needs more vertical space.
     window_fitted: bool,
+    last_phase_key: u8,
 }
 
 impl ShrinkApp {
@@ -99,6 +100,17 @@ impl ShrinkApp {
             app_icon,
             show_about: false,
             window_fitted: false,
+            last_phase_key: 0,
+        }
+    }
+
+    fn phase_key(&self) -> u8 {
+        match self.phase {
+            AppPhase::Idle => 0,
+            AppPhase::ConfirmOverwrite { .. } => 1,
+            AppPhase::Working => 2,
+            AppPhase::AskDelete { .. } => 3,
+            AppPhase::Done { .. } => 4,
         }
     }
 
@@ -361,6 +373,31 @@ impl eframe::App for ShrinkApp {
             );
         }
 
+        // Reserve a bottom action strip so prompts/buttons never overlap the diagram
+        let (input, est_out, saved, keep, dropc, all_ready) = self.totals();
+        let analyzing_any = self.queue.iter().any(|q| q.analyzing);
+        let footer_h = match &self.phase {
+            AppPhase::ConfirmOverwrite { existing } => {
+                108.0 + (existing.len().min(4) as f32) * 18.0
+            }
+            AppPhase::AskDelete { .. } => 110.0,
+            AppPhase::Working => 96.0,
+            AppPhase::Done { .. } => 72.0,
+            AppPhase::Idle => 64.0,
+        };
+
+        egui::TopBottomPanel::bottom("action_footer")
+            .exact_height(footer_h)
+            .frame(
+                Frame::new()
+                    .fill(panel)
+                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(226, 232, 240)))
+                    .inner_margin(Margin::symmetric(18, 12)),
+            )
+            .show(ctx, |ui| {
+                self.draw_footer_actions(ui, &t, accent, muted, danger, ok, text, all_ready, analyzing_any);
+            });
+
         let mut content_size = Vec2::ZERO;
         egui::CentralPanel::default()
             .frame(Frame::new().fill(bg).inner_margin(Margin::same(18)))
@@ -595,9 +632,7 @@ impl eframe::App for ShrinkApp {
 
                 ui.add_space(12.0);
 
-                // Analysis card + size diagram (hide while showing final results to avoid double panels)
-                let (input, est_out, saved, keep, dropc, all_ready) = self.totals();
-                let analyzing_any = self.queue.iter().any(|q| q.analyzing);
+                // Analysis / results card (actions live in the bottom panel)
                 let show_estimate_card = !matches!(self.phase, AppPhase::Done { .. });
 
                 if show_estimate_card {
@@ -622,7 +657,7 @@ impl eframe::App for ShrinkApp {
                                 muted,
                                 text,
                             );
-                            ui.add_space(8.0);
+                            ui.add_space(10.0);
                             ui.horizontal(|ui| {
                                 ui.label(
                                     RichText::new(format!("{}: {keep}", t.keep_count))
@@ -639,171 +674,66 @@ impl eframe::App for ShrinkApp {
                                 }
                             });
                         });
-                    ui.add_space(14.0);
-                }
-
-                // Actions / progress
-                match &self.phase {
-                    AppPhase::ConfirmOverwrite { existing } => {
-                        let existing = existing.clone();
-                        ui.colored_label(
-                            Color32::from_rgb(180, 83, 9),
-                            RichText::new(t.overwrite_warn).strong(),
-                        );
-                        ui.add_space(4.0);
-                        egui::ScrollArea::vertical()
-                            .max_height(100.0)
-                            .show(ui, |ui| {
-                                for p in &existing {
-                                    let name = p
-                                        .file_name()
-                                        .and_then(|s| s.to_str())
-                                        .unwrap_or("?");
-                                    ui.label(RichText::new(format!("• {name}")).color(text));
-                                }
-                            });
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new(t.overwrite_yes).color(Color32::WHITE),
-                                    )
-                                    .fill(Color32::from_rgb(180, 83, 9)),
-                                )
-                                .clicked()
-                            {
-                                self.start_shrink();
-                            }
-                            if ui.button(t.overwrite_no).clicked() {
-                                self.phase = AppPhase::Idle;
-                            }
+                } else if let AppPhase::Done { results, deleted } = &self.phase {
+                    let results = results.clone();
+                    let deleted = *deleted;
+                    let total_in: u64 = results.iter().map(|r| r.input_size).sum();
+                    let total_out: u64 = results.iter().map(|r| r.output_size).sum();
+                    let saved_n = total_in.saturating_sub(total_out);
+                    ui.label(RichText::new(t.done).color(ok).strong().size(16.0));
+                    ui.add_space(6.0);
+                    Frame::new()
+                        .fill(panel)
+                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225)))
+                        .corner_radius(CornerRadius::same(10))
+                        .inner_margin(Margin::same(14))
+                        .show(ui, |ui| {
+                            size_diagram(
+                                ui,
+                                SizeDiagramLabels {
+                                    input_label: t.input_size,
+                                    output_label: t.actual_output,
+                                    saved_label: t.actual_saved,
+                                },
+                                total_in,
+                                total_out,
+                                saved_n,
+                                accent,
+                                ok,
+                                muted,
+                                text,
+                            );
                         });
-                    }
-                    AppPhase::Working => {
-                        ui.add(
-                            egui::ProgressBar::new(self.progress)
-                                .show_percentage()
-                                .animate(true)
-                                .desired_width(ui.available_width()),
-                        );
-                        ui.label(RichText::new(&self.progress_label).color(muted));
-                        if ui.button(t.cancel).clicked() {
-                            self.cancel.store(true, Ordering::Relaxed);
-                        }
-                    }
-                    AppPhase::AskDelete { remember, .. } => {
-                        let mut remember_flag = *remember;
-                        ui.label(RichText::new(t.ask_delete).size(15.0).color(text));
-                        ui.checkbox(&mut remember_flag, t.remember_delete);
-                        if let AppPhase::AskDelete { remember, .. } = &mut self.phase {
-                            *remember = remember_flag;
-                        }
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new(t.delete_yes).color(Color32::WHITE),
-                                    )
-                                    .fill(danger),
-                                )
-                                .clicked()
-                            {
-                                let rem = remember_flag;
-                                self.apply_delete_choice(true, rem);
-                            }
-                            if ui.button(t.delete_no).clicked() {
-                                let rem = remember_flag;
-                                self.apply_delete_choice(false, rem);
-                            }
-                        });
-                    }
-                    AppPhase::Done { results, deleted } => {
-                        let results = results.clone();
-                        let deleted = *deleted;
-                        let total_in: u64 = results.iter().map(|r| r.input_size).sum();
-                        let total_out: u64 = results.iter().map(|r| r.output_size).sum();
-                        let saved_n = total_in.saturating_sub(total_out);
-                        ui.label(RichText::new(t.done).color(ok).strong().size(16.0));
-                        Frame::new()
-                            .fill(panel)
-                            .stroke(Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225)))
-                            .corner_radius(CornerRadius::same(10))
-                            .inner_margin(Margin::same(12))
-                            .show(ui, |ui| {
-                                size_diagram(
-                                    ui,
-                                    SizeDiagramLabels {
-                                        input_label: t.input_size,
-                                        output_label: t.actual_output,
-                                        saved_label: t.actual_saved,
-                                    },
-                                    total_in,
-                                    total_out,
-                                    saved_n,
-                                    accent,
-                                    ok,
-                                    muted,
-                                    text,
-                                );
-                            });
-                        if deleted {
-                            ui.label(RichText::new(t.delete_yes).color(muted).small());
-                        }
-                        if let Some(first) = results.first() {
-                            if let Some(parent) = first.output.parent() {
-                                if ui.button(t.open_folder).clicked() {
-                                    open_folder(parent);
-                                }
-                            }
-                        }
-                    }
-                    AppPhase::Idle => {
-                        let can_run = all_ready
-                            && !analyzing_any
-                            && self.queue.iter().any(|q| {
-                                q.analysis
-                                    .as_ref()
-                                    .map(|a| a.is_processable())
-                                    .unwrap_or(false)
-                            });
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add_enabled(
-                                    can_run,
-                                    egui::Button::new(
-                                        RichText::new(t.shrink).color(Color32::WHITE).size(16.0),
-                                    )
-                                    .fill(accent)
-                                    .min_size(Vec2::new(140.0, 36.0)),
-                                )
-                                .clicked()
-                            {
-                                self.request_shrink();
-                            }
-                            ui.label(RichText::new(&self.status).color(muted));
-                        });
+                    if deleted {
+                        ui.add_space(6.0);
+                        ui.label(RichText::new(t.delete_yes).color(muted).small());
                     }
                 }
 
                 if let Some(err) = &self.last_error {
-                    ui.add_space(6.0);
+                    ui.add_space(10.0);
                     ui.colored_label(danger, format!("{}: {err}", t.error));
                 }
 
-                ui.add_space(8.0);
+                ui.add_space(12.0);
                     });
                 content_size = scroll.content_size;
             });
 
-        // Auto-grow the window so stacked sections are not clipped/overlapped
+        // Re-fit when the footer phase changes (overwrite / delete prompts need height)
+        let phase_key = self.phase_key();
+        if phase_key != self.last_phase_key {
+            self.last_phase_key = phase_key;
+            self.window_fitted = false;
+        }
+
         if !self.window_fitted {
-            let margin = Vec2::new(48.0, 56.0);
+            let margin = Vec2::new(48.0, footer_h + 48.0);
             let needed = content_size + margin;
             let screen = ctx.screen_rect().size();
             let target = Vec2::new(
                 needed.x.clamp(720.0, 1100.0).max(screen.x),
-                needed.y.clamp(700.0, 980.0).max(screen.y),
+                needed.y.clamp(720.0, 1100.0).max(screen.y),
             );
             if target.x > screen.x + 8.0 || target.y > screen.y + 8.0 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(target));
@@ -824,6 +754,138 @@ impl eframe::App for ShrinkApp {
 }
 
 impl ShrinkApp {
+    fn draw_footer_actions(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &Strings,
+        accent: Color32,
+        muted: Color32,
+        danger: Color32,
+        ok: Color32,
+        text: Color32,
+        all_ready: bool,
+        analyzing_any: bool,
+    ) {
+        match &self.phase {
+            AppPhase::ConfirmOverwrite { existing } => {
+                let existing = existing.clone();
+                ui.colored_label(
+                    Color32::from_rgb(180, 83, 9),
+                    RichText::new(t.overwrite_warn).strong(),
+                );
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical()
+                    .max_height(72.0)
+                    .show(ui, |ui| {
+                        for p in &existing {
+                            let name = p
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("?");
+                            ui.label(RichText::new(format!("• {name}")).color(text));
+                        }
+                    });
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(t.overwrite_yes).color(Color32::WHITE),
+                            )
+                            .fill(Color32::from_rgb(180, 83, 9)),
+                        )
+                        .clicked()
+                    {
+                        self.start_shrink();
+                    }
+                    if ui.button(t.overwrite_no).clicked() {
+                        self.phase = AppPhase::Idle;
+                    }
+                });
+            }
+            AppPhase::Working => {
+                ui.add(
+                    egui::ProgressBar::new(self.progress)
+                        .show_percentage()
+                        .animate(true)
+                        .desired_width(ui.available_width()),
+                );
+                ui.add_space(4.0);
+                ui.label(RichText::new(&self.progress_label).color(muted));
+                ui.add_space(4.0);
+                if ui.button(t.cancel).clicked() {
+                    self.cancel.store(true, Ordering::Relaxed);
+                }
+            }
+            AppPhase::AskDelete { remember, .. } => {
+                let mut remember_flag = *remember;
+                ui.label(RichText::new(t.ask_delete).size(15.0).color(text));
+                ui.checkbox(&mut remember_flag, t.remember_delete);
+                if let AppPhase::AskDelete { remember, .. } = &mut self.phase {
+                    *remember = remember_flag;
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(t.delete_yes).color(Color32::WHITE),
+                            )
+                            .fill(danger),
+                        )
+                        .clicked()
+                    {
+                        let rem = remember_flag;
+                        self.apply_delete_choice(true, rem);
+                    }
+                    if ui.button(t.delete_no).clicked() {
+                        let rem = remember_flag;
+                        self.apply_delete_choice(false, rem);
+                    }
+                });
+            }
+            AppPhase::Done { results, .. } => {
+                let folder = results
+                    .first()
+                    .and_then(|r| r.output.parent().map(|p| p.to_path_buf()));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(t.done).color(ok).strong());
+                    if let Some(parent) = folder {
+                        if ui.button(t.open_folder).clicked() {
+                            open_folder(&parent);
+                        }
+                    }
+                });
+            }
+            AppPhase::Idle => {
+                let can_run = all_ready
+                    && !analyzing_any
+                    && self.queue.iter().any(|q| {
+                        q.analysis
+                            .as_ref()
+                            .map(|a| a.is_processable())
+                            .unwrap_or(false)
+                    });
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(
+                            can_run,
+                            egui::Button::new(
+                                RichText::new(t.shrink).color(Color32::WHITE).size(16.0),
+                            )
+                            .fill(accent)
+                            .min_size(Vec2::new(140.0, 36.0)),
+                        )
+                        .clicked()
+                    {
+                        self.request_shrink();
+                    }
+                    ui.label(RichText::new(&self.status).color(muted));
+                });
+            }
+        }
+    }
+
     fn about_overlay(
         &mut self,
         ctx: &egui::Context,
