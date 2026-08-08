@@ -1,4 +1,4 @@
-# Sergas ZIP Shrinker
+# Encolledor de ZIP de Imaxes diagnósticas | E-Saúde - Sergas 
 
 <p align="center">
   <img src="assets/sergas_logo.png" alt="SERGAS" width="200" />
@@ -10,7 +10,9 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-teal.svg)](#descarga-usuarios)
 [![UI](https://img.shields.io/badge/UI-gl%20%7C%20es%20%7C%20en%20%7C%20fr%20%7C%20pt-informational.svg)](#idioma)
 
-Ferramenta de escritorio para **reducir os ZIP** descargados de **e-Saúde (SERGAS)** eliminando o visualizador Alma3D e outros ficheiros innecesarios.  
+Ferramenta de escritorio para **reducir os ZIP** de Imaxes diagnósticas, descargadas de **e-Saúde (SERGAS)**.
+
+Elimina o visualizador Alma3D e outros ficheiros innecesarios.  
 O resultado é un ZIP máis pequeno con só o contido DICOM, apto para abrilo en visualizadores estándar como **Weasis**.
 
 > PRIVADA: Esta aplicación NON accede a e-saúde nin ao Sergas. Tampouco almacena ningún tipo de información persoal.
