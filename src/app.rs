@@ -1,7 +1,9 @@
 use crate::about;
 use crate::config::AppConfig;
 use crate::i18n::{self, Lang, Strings};
-use crate::zip_ops::{analyze_zip, format_bytes, shrink_many, ProgressFn, ShrinkResult, ZipAnalysis};
+use crate::zip_ops::{
+    analyze_zip, format_bytes, output_path_for, shrink_many, ProgressFn, ShrinkResult, ZipAnalysis,
+};
 use eframe::egui::{
     self, Color32, ColorImage, CornerRadius, Frame, Margin, RichText, Sense, Stroke, TextureHandle,
     TextureOptions, Vec2,
@@ -36,6 +38,9 @@ enum WorkerMsg {
 
 enum AppPhase {
     Idle,
+    ConfirmOverwrite {
+        existing: Vec<PathBuf>,
+    },
     Working,
     AskDelete {
         results: Vec<ShrinkResult>,
@@ -63,6 +68,9 @@ pub struct ShrinkApp {
     radiography: Option<TextureHandle>,
     app_icon: Option<TextureHandle>,
     show_about: bool,
+    /// Grow the OS window when content/phase needs more vertical space.
+    window_fitted: bool,
+    last_phase_key: u8,
 }
 
 impl ShrinkApp {
@@ -91,6 +99,18 @@ impl ShrinkApp {
             radiography,
             app_icon,
             show_about: false,
+            window_fitted: false,
+            last_phase_key: 0,
+        }
+    }
+
+    fn phase_key(&self) -> u8 {
+        match self.phase {
+            AppPhase::Idle => 0,
+            AppPhase::ConfirmOverwrite { .. } => 1,
+            AppPhase::Working => 2,
+            AppPhase::AskDelete { .. } => 3,
+            AppPhase::Done { .. } => 4,
         }
     }
 
@@ -165,6 +185,25 @@ impl ShrinkApp {
         (input, est_out, saved, keep, drop, all_ready)
     }
 
+    fn existing_outputs(&self) -> Vec<PathBuf> {
+        self.queue
+            .iter()
+            .filter_map(|q| q.analysis.as_ref())
+            .filter(|a| a.is_processable())
+            .map(|a| output_path_for(&a.path))
+            .filter(|p| p.exists())
+            .collect()
+    }
+
+    fn request_shrink(&mut self) {
+        let existing = self.existing_outputs();
+        if !existing.is_empty() {
+            self.phase = AppPhase::ConfirmOverwrite { existing };
+            return;
+        }
+        self.start_shrink();
+    }
+
     fn start_shrink(&mut self) {
         let t = self.t();
         let analyses: Vec<ZipAnalysis> = self
@@ -175,6 +214,7 @@ impl ShrinkApp {
             .collect();
         if analyses.is_empty() {
             self.last_error = Some(t.no_dicom.to_string());
+            self.phase = AppPhase::Idle;
             return;
         }
 
@@ -315,27 +355,58 @@ impl eframe::App for ShrinkApp {
         let ok = Color32::from_rgb(21, 128, 61);
         let danger = Color32::from_rgb(185, 28, 28);
 
+        // Watermark on the background layer only (never covers interactive widgets)
+        if let Some(tex) = &self.radiography {
+            let screen = ctx.screen_rect();
+            let side = (screen.width().min(screen.height()) * 0.38).clamp(140.0, 240.0);
+            let size = Vec2::splat(side);
+            let pos = egui::pos2(
+                screen.right() - size.x - 20.0,
+                screen.bottom() - size.y - 20.0,
+            );
+            let rect = egui::Rect::from_min_size(pos, size);
+            ctx.layer_painter(egui::LayerId::background()).image(
+                tex.id(),
+                rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                Color32::from_white_alpha(22),
+            );
+        }
+
+        // Reserve a bottom action strip so prompts/buttons never overlap the diagram
+        let (input, est_out, saved, keep, dropc, all_ready) = self.totals();
+        let analyzing_any = self.queue.iter().any(|q| q.analyzing);
+        let footer_h = match &self.phase {
+            AppPhase::ConfirmOverwrite { existing } => {
+                108.0 + (existing.len().min(4) as f32) * 18.0
+            }
+            AppPhase::AskDelete { .. } => 110.0,
+            AppPhase::Working => 96.0,
+            AppPhase::Done { .. } => 72.0,
+            AppPhase::Idle => 64.0,
+        };
+
+        egui::TopBottomPanel::bottom("action_footer")
+            .exact_height(footer_h)
+            .frame(
+                Frame::new()
+                    .fill(panel)
+                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(226, 232, 240)))
+                    .inner_margin(Margin::symmetric(18, 12)),
+            )
+            .show(ctx, |ui| {
+                self.draw_footer_actions(ui, &t, accent, muted, danger, ok, text, all_ready, analyzing_any);
+            });
+
+        let mut content_size = Vec2::ZERO;
         egui::CentralPanel::default()
             .frame(Frame::new().fill(bg).inner_margin(Margin::same(18)))
             .show(ctx, |ui| {
-                // Soft radiography watermark (medical imaging atmosphere)
-                if let Some(tex) = &self.radiography {
-                    let avail = ui.max_rect();
-                    let side = avail.width().min(avail.height()) * 0.62;
-                    let size = Vec2::splat(side);
-                    let pos = egui::pos2(
-                        avail.right() - size.x * 0.78,
-                        avail.center().y - size.y * 0.35,
-                    );
-                    let rect = egui::Rect::from_min_size(pos, size);
-                    ui.painter().image(
-                        tex.id(),
-                        rect,
-                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                        Color32::from_white_alpha(70),
-                    );
-                }
-
+                let scroll = egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .id_salt("main_scroll")
+                    .show(ui, |ui| {
+                        ui.set_min_width((ui.available_width() - 4.0).max(640.0));
                 ui.horizontal(|ui| {
                     ui.horizontal(|ui| {
                         if let Some(tex) = &self.app_icon {
@@ -366,9 +437,13 @@ impl eframe::App for ShrinkApp {
                                         .strong(),
                                 );
                                 ui.label(
-                                    RichText::new(t.app_title)
-                                        .color(muted)
-                                        .size(12.0),
+                                    RichText::new(format!(
+                                        "{} · {}",
+                                        about::GIT_TAG,
+                                        about::GIT_COMMIT_SHORT
+                                    ))
+                                    .color(muted)
+                                    .size(12.0),
                                 );
                             });
                         } else {
@@ -381,7 +456,27 @@ impl eframe::App for ShrinkApp {
                         }
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Flag buttons (right-to-left → reverse order so gl appears leftmost)
+                        // About first in RTL ⇒ pinned to the far right (always visible)
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new(t.about).color(Color32::WHITE).strong(),
+                                )
+                                .fill(accent)
+                                .corner_radius(CornerRadius::same(6))
+                                .min_size(Vec2::new(88.0, 28.0)),
+                            )
+                            .on_hover_text(format!(
+                                "{} {} ({})",
+                                t.about_version,
+                                about::VERSION,
+                                about::GIT_TAG
+                            ))
+                            .clicked()
+                        {
+                            self.show_about = true;
+                        }
+                        ui.add_space(8.0);
                         for lang in Lang::all().iter().rev() {
                             let selected = self.lang == *lang;
                             if flag_button(ui, *lang, selected).clicked() {
@@ -392,20 +487,28 @@ impl eframe::App for ShrinkApp {
                             }
                         }
                         ui.label(RichText::new(t.language).color(muted));
-                        ui.add_space(6.0);
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(t.disclaimer).size(12.0).color(muted));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
-                            .add(
-                                egui::Button::new(RichText::new(t.about).color(accent))
-                                    .fill(accent_soft)
-                                    .corner_radius(CornerRadius::same(6)),
+                            .link(
+                                RichText::new(format!(
+                                    "{} {}",
+                                    t.about_version,
+                                    about::GIT_DESCRIBE
+                                ))
+                                .size(12.0)
+                                .color(accent),
                             )
+                            .on_hover_text(t.about)
                             .clicked()
                         {
                             self.show_about = true;
                         }
                     });
                 });
-                ui.label(RichText::new(t.disclaimer).size(12.0).color(muted));
                 ui.add_space(8.0);
 
                 // Drop zone
@@ -527,167 +630,118 @@ impl eframe::App for ShrinkApp {
                         }
                     });
 
-                ui.add_space(10.0);
-
-                // Analysis card + size diagram
-                let (input, est_out, saved, keep, dropc, all_ready) = self.totals();
-                let analyzing_any = self.queue.iter().any(|q| q.analyzing);
-
-                Frame::new()
-                    .fill(panel)
-                    .stroke(Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225)))
-                    .corner_radius(CornerRadius::same(10))
-                    .inner_margin(Margin::same(14))
-                    .show(ui, |ui| {
-                        size_diagram(
-                            ui,
-                            SizeDiagramLabels {
-                                input_label: t.input_size,
-                                output_label: t.est_output,
-                                saved_label: t.est_saved,
-                            },
-                            input,
-                            est_out,
-                            saved,
-                            accent,
-                            ok,
-                            muted,
-                            text,
-                        );
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                RichText::new(format!("{}: {keep}", t.keep_count)).color(muted),
-                            );
-                            ui.separator();
-                            ui.label(
-                                RichText::new(format!("{}: {dropc}", t.drop_count)).color(muted),
-                            );
-                            if analyzing_any {
-                                ui.separator();
-                                ui.label(RichText::new(t.analyzing).color(accent));
-                            }
-                        });
-                    });
-
                 ui.add_space(12.0);
 
-                // Actions / progress
-                match &self.phase {
-                    AppPhase::Working => {
-                        ui.add(
-                            egui::ProgressBar::new(self.progress)
-                                .show_percentage()
-                                .animate(true)
-                                .desired_width(ui.available_width()),
-                        );
-                        ui.label(RichText::new(&self.progress_label).color(muted));
-                        if ui.button(t.cancel).clicked() {
-                            self.cancel.store(true, Ordering::Relaxed);
-                        }
-                    }
-                    AppPhase::AskDelete { remember, .. } => {
-                        let mut remember_flag = *remember;
-                        ui.label(RichText::new(t.ask_delete).size(15.0).color(text));
-                        ui.checkbox(&mut remember_flag, t.remember_delete);
-                        if let AppPhase::AskDelete { remember, .. } = &mut self.phase {
-                            *remember = remember_flag;
-                        }
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new(t.delete_yes).color(Color32::WHITE),
-                                    )
-                                    .fill(danger),
-                                )
-                                .clicked()
-                            {
-                                let rem = remember_flag;
-                                self.apply_delete_choice(true, rem);
-                            }
-                            if ui.button(t.delete_no).clicked() {
-                                let rem = remember_flag;
-                                self.apply_delete_choice(false, rem);
-                            }
-                        });
-                    }
-                    AppPhase::Done { results, deleted } => {
-                        let results = results.clone();
-                        let deleted = *deleted;
-                        let total_in: u64 = results.iter().map(|r| r.input_size).sum();
-                        let total_out: u64 = results.iter().map(|r| r.output_size).sum();
-                        let saved_n = total_in.saturating_sub(total_out);
-                        ui.label(RichText::new(t.done).color(ok).strong().size(16.0));
-                        Frame::new()
-                            .fill(panel)
-                            .stroke(Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225)))
-                            .corner_radius(CornerRadius::same(10))
-                            .inner_margin(Margin::same(12))
-                            .show(ui, |ui| {
-                                size_diagram(
-                                    ui,
-                                    SizeDiagramLabels {
-                                        input_label: t.input_size,
-                                        output_label: t.actual_output,
-                                        saved_label: t.actual_saved,
-                                    },
-                                    total_in,
-                                    total_out,
-                                    saved_n,
-                                    accent,
-                                    ok,
-                                    muted,
-                                    text,
+                // Analysis / results card (actions live in the bottom panel)
+                let show_estimate_card = !matches!(self.phase, AppPhase::Done { .. });
+
+                if show_estimate_card {
+                    Frame::new()
+                        .fill(panel)
+                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225)))
+                        .corner_radius(CornerRadius::same(10))
+                        .inner_margin(Margin::same(14))
+                        .show(ui, |ui| {
+                            size_diagram(
+                                ui,
+                                SizeDiagramLabels {
+                                    input_label: t.input_size,
+                                    output_label: t.est_output,
+                                    saved_label: t.est_saved,
+                                },
+                                input,
+                                est_out,
+                                saved,
+                                accent,
+                                ok,
+                                muted,
+                                text,
+                            );
+                            ui.add_space(10.0);
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{}: {keep}", t.keep_count))
+                                        .color(muted),
                                 );
-                            });
-                        if deleted {
-                            ui.label(RichText::new(t.delete_yes).color(muted).small());
-                        }
-                        if let Some(first) = results.first() {
-                            if let Some(parent) = first.output.parent() {
-                                if ui.button(t.open_folder).clicked() {
-                                    open_folder(parent);
+                                ui.separator();
+                                ui.label(
+                                    RichText::new(format!("{}: {dropc}", t.drop_count))
+                                        .color(muted),
+                                );
+                                if analyzing_any {
+                                    ui.separator();
+                                    ui.label(RichText::new(t.analyzing).color(accent));
                                 }
-                            }
-                        }
-                    }
-                    AppPhase::Idle => {
-                        let can_run = all_ready
-                            && !analyzing_any
-                            && self.queue.iter().any(|q| {
-                                q.analysis
-                                    .as_ref()
-                                    .map(|a| a.is_processable())
-                                    .unwrap_or(false)
                             });
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add_enabled(
-                                    can_run,
-                                    egui::Button::new(
-                                        RichText::new(t.shrink).color(Color32::WHITE).size(16.0),
-                                    )
-                                    .fill(accent)
-                                    .min_size(Vec2::new(140.0, 36.0)),
-                                )
-                                .clicked()
-                            {
-                                self.start_shrink();
-                            }
-                            ui.label(RichText::new(&self.status).color(muted));
                         });
+                } else if let AppPhase::Done { results, deleted } = &self.phase {
+                    let results = results.clone();
+                    let deleted = *deleted;
+                    let total_in: u64 = results.iter().map(|r| r.input_size).sum();
+                    let total_out: u64 = results.iter().map(|r| r.output_size).sum();
+                    let saved_n = total_in.saturating_sub(total_out);
+                    ui.label(RichText::new(t.done).color(ok).strong().size(16.0));
+                    ui.add_space(6.0);
+                    Frame::new()
+                        .fill(panel)
+                        .stroke(Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225)))
+                        .corner_radius(CornerRadius::same(10))
+                        .inner_margin(Margin::same(14))
+                        .show(ui, |ui| {
+                            size_diagram(
+                                ui,
+                                SizeDiagramLabels {
+                                    input_label: t.input_size,
+                                    output_label: t.actual_output,
+                                    saved_label: t.actual_saved,
+                                },
+                                total_in,
+                                total_out,
+                                saved_n,
+                                accent,
+                                ok,
+                                muted,
+                                text,
+                            );
+                        });
+                    if deleted {
+                        ui.add_space(6.0);
+                        ui.label(RichText::new(t.delete_yes).color(muted).small());
                     }
                 }
 
                 if let Some(err) = &self.last_error {
-                    ui.add_space(6.0);
+                    ui.add_space(10.0);
                     ui.colored_label(danger, format!("{}: {err}", t.error));
                 }
 
-                // Invisible interact for drop highlighting
-                let _ = ui.allocate_response(ui.available_size(), Sense::hover());
+                ui.add_space(12.0);
+                    });
+                content_size = scroll.content_size;
             });
+
+        // Re-fit when the footer phase changes (overwrite / delete prompts need height)
+        let phase_key = self.phase_key();
+        if phase_key != self.last_phase_key {
+            self.last_phase_key = phase_key;
+            self.window_fitted = false;
+        }
+
+        if !self.window_fitted {
+            let margin = Vec2::new(48.0, footer_h + 48.0);
+            let needed = content_size + margin;
+            let screen = ctx.screen_rect().size();
+            let target = Vec2::new(
+                needed.x.clamp(720.0, 1100.0).max(screen.x),
+                needed.y.clamp(720.0, 1100.0).max(screen.y),
+            );
+            if target.x > screen.x + 8.0 || target.y > screen.y + 8.0 {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(target));
+                ctx.request_repaint();
+            } else {
+                self.window_fitted = true;
+            }
+        }
 
         if self.show_about {
             self.about_overlay(ctx, accent, accent_soft, panel, text, muted, ok);
@@ -700,6 +754,138 @@ impl eframe::App for ShrinkApp {
 }
 
 impl ShrinkApp {
+    fn draw_footer_actions(
+        &mut self,
+        ui: &mut egui::Ui,
+        t: &Strings,
+        accent: Color32,
+        muted: Color32,
+        danger: Color32,
+        ok: Color32,
+        text: Color32,
+        all_ready: bool,
+        analyzing_any: bool,
+    ) {
+        match &self.phase {
+            AppPhase::ConfirmOverwrite { existing } => {
+                let existing = existing.clone();
+                ui.colored_label(
+                    Color32::from_rgb(180, 83, 9),
+                    RichText::new(t.overwrite_warn).strong(),
+                );
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical()
+                    .max_height(72.0)
+                    .show(ui, |ui| {
+                        for p in &existing {
+                            let name = p
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("?");
+                            ui.label(RichText::new(format!("• {name}")).color(text));
+                        }
+                    });
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(t.overwrite_yes).color(Color32::WHITE),
+                            )
+                            .fill(Color32::from_rgb(180, 83, 9)),
+                        )
+                        .clicked()
+                    {
+                        self.start_shrink();
+                    }
+                    if ui.button(t.overwrite_no).clicked() {
+                        self.phase = AppPhase::Idle;
+                    }
+                });
+            }
+            AppPhase::Working => {
+                ui.add(
+                    egui::ProgressBar::new(self.progress)
+                        .show_percentage()
+                        .animate(true)
+                        .desired_width(ui.available_width()),
+                );
+                ui.add_space(4.0);
+                ui.label(RichText::new(&self.progress_label).color(muted));
+                ui.add_space(4.0);
+                if ui.button(t.cancel).clicked() {
+                    self.cancel.store(true, Ordering::Relaxed);
+                }
+            }
+            AppPhase::AskDelete { remember, .. } => {
+                let mut remember_flag = *remember;
+                ui.label(RichText::new(t.ask_delete).size(15.0).color(text));
+                ui.checkbox(&mut remember_flag, t.remember_delete);
+                if let AppPhase::AskDelete { remember, .. } = &mut self.phase {
+                    *remember = remember_flag;
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(t.delete_yes).color(Color32::WHITE),
+                            )
+                            .fill(danger),
+                        )
+                        .clicked()
+                    {
+                        let rem = remember_flag;
+                        self.apply_delete_choice(true, rem);
+                    }
+                    if ui.button(t.delete_no).clicked() {
+                        let rem = remember_flag;
+                        self.apply_delete_choice(false, rem);
+                    }
+                });
+            }
+            AppPhase::Done { results, .. } => {
+                let folder = results
+                    .first()
+                    .and_then(|r| r.output.parent().map(|p| p.to_path_buf()));
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(t.done).color(ok).strong());
+                    if let Some(parent) = folder {
+                        if ui.button(t.open_folder).clicked() {
+                            open_folder(&parent);
+                        }
+                    }
+                });
+            }
+            AppPhase::Idle => {
+                let can_run = all_ready
+                    && !analyzing_any
+                    && self.queue.iter().any(|q| {
+                        q.analysis
+                            .as_ref()
+                            .map(|a| a.is_processable())
+                            .unwrap_or(false)
+                    });
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(
+                            can_run,
+                            egui::Button::new(
+                                RichText::new(t.shrink).color(Color32::WHITE).size(16.0),
+                            )
+                            .fill(accent)
+                            .min_size(Vec2::new(140.0, 36.0)),
+                        )
+                        .clicked()
+                    {
+                        self.request_shrink();
+                    }
+                    ui.label(RichText::new(&self.status).color(muted));
+                });
+            }
+        }
+    }
+
     fn about_overlay(
         &mut self,
         ctx: &egui::Context,
@@ -859,7 +1045,7 @@ struct SizeDiagramLabels {
     saved_label: &'static str,
 }
 
-/// Comparative size chart: input bar vs output bar + savings ring.
+/// Comparative size chart: savings ring + labeled progress bars (no overlapping painters).
 fn size_diagram(
     ui: &mut egui::Ui,
     labels: SizeDiagramLabels,
@@ -872,119 +1058,121 @@ fn size_diagram(
     text: Color32,
 ) {
     let pct = if input > 0 {
-        saved as f32 / input as f32
+        (saved as f32 / input as f32).clamp(0.0, 1.0)
     } else {
         0.0
     };
     let out_ratio = if input > 0 {
-        (output as f32 / input as f32).clamp(0.02, 1.0)
+        (output as f32 / input as f32).clamp(0.0, 1.0)
     } else {
         0.0
     };
+    let track = Color32::from_rgb(226, 232, 240);
 
     ui.horizontal(|ui| {
-        // Left: donut with % saved
-        let donut_size = Vec2::splat(96.0);
-        let (donut_rect, _) = ui.allocate_exact_size(donut_size, Sense::hover());
-        let painter = ui.painter_at(donut_rect);
-        let center = donut_rect.center();
-        let radius = donut_rect.width() * 0.42;
-        let stroke_w = 11.0_f32;
+        // Fixed-width donut column
+        ui.allocate_ui_with_layout(
+            Vec2::new(110.0, 110.0),
+            egui::Layout::top_down(egui::Align::Center),
+            |ui| {
+                let donut_size = Vec2::splat(100.0);
+                let (donut_rect, _) = ui.allocate_exact_size(donut_size, Sense::hover());
+                let painter = ui.painter_at(donut_rect);
+                let center = donut_rect.center();
+                let radius = 38.0_f32;
+                let stroke_w = 10.0_f32;
 
-        // Track
-        painter.circle_stroke(
-            center,
-            radius,
-            Stroke::new(stroke_w, Color32::from_rgb(226, 232, 240)),
-        );
-        // Arc for saved portion (egui doesn't have native arcs — approximate with many segments)
-        if pct > 0.001 {
-            let segments = 64;
-            let start = -std::f32::consts::FRAC_PI_2;
-            let sweep = pct.clamp(0.0, 1.0) * std::f32::consts::TAU;
-            let mut points = Vec::with_capacity(segments + 1);
-            for i in 0..=segments {
-                let a = start + sweep * (i as f32 / segments as f32);
-                points.push(egui::pos2(
-                    center.x + radius * a.cos(),
-                    center.y + radius * a.sin(),
-                ));
-            }
-            painter.add(egui::Shape::line(points, Stroke::new(stroke_w, ok)));
-        }
-        painter.text(
-            center - Vec2::new(0.0, 8.0),
-            egui::Align2::CENTER_CENTER,
-            format!("{:.0}%", pct * 100.0),
-            egui::FontId::proportional(22.0),
-            ok,
-        );
-        painter.text(
-            center + Vec2::new(0.0, 14.0),
-            egui::Align2::CENTER_CENTER,
-            labels.saved_label,
-            egui::FontId::proportional(10.0),
-            muted,
+                painter.circle_stroke(center, radius, Stroke::new(stroke_w, track));
+                if pct > 0.001 {
+                    let segments = 72;
+                    let start = -std::f32::consts::FRAC_PI_2;
+                    let sweep = pct * std::f32::consts::TAU;
+                    let mut points = Vec::with_capacity(segments + 1);
+                    for i in 0..=segments {
+                        let a = start + sweep * (i as f32 / segments as f32);
+                        points.push(egui::pos2(
+                            center.x + radius * a.cos(),
+                            center.y + radius * a.sin(),
+                        ));
+                    }
+                    painter.add(egui::Shape::line(points, Stroke::new(stroke_w, ok)));
+                }
+                painter.text(
+                    center - Vec2::new(0.0, 6.0),
+                    egui::Align2::CENTER_CENTER,
+                    format!("{:.0}%", pct * 100.0),
+                    egui::FontId::proportional(20.0),
+                    ok,
+                );
+                painter.text(
+                    center + Vec2::new(0.0, 14.0),
+                    egui::Align2::CENTER_CENTER,
+                    labels.saved_label,
+                    egui::FontId::proportional(10.0),
+                    muted,
+                );
+            },
         );
 
-        ui.add_space(14.0);
+        ui.add_space(16.0);
 
-        // Right: comparative bars
+        // Bars column — use native ProgressBar to avoid custom-paint overlap
         ui.vertical(|ui| {
-            ui.set_min_width(ui.available_width().max(180.0));
+            let bar_w = (ui.available_width() - 8.0).max(200.0);
+            ui.set_max_width(bar_w);
 
-            bar_row(
+            metric_bar(
                 ui,
                 labels.input_label,
-                format_bytes(input),
-                1.0,
+                &format_bytes(input),
+                if input > 0 { 1.0 } else { 0.0 },
                 Color32::from_rgb(100, 116, 139),
+                track,
                 text,
                 muted,
             );
-            ui.add_space(8.0);
-            bar_row(
+            ui.add_space(12.0);
+            metric_bar(
                 ui,
                 labels.output_label,
-                format_bytes(output),
+                &format_bytes(output),
                 out_ratio,
                 accent,
+                track,
                 text,
                 muted,
             );
-            ui.add_space(8.0);
+            ui.add_space(12.0);
+            metric_bar(
+                ui,
+                labels.saved_label,
+                &format!("{} ({:.0}%)", format_bytes(saved), pct * 100.0),
+                pct,
+                ok,
+                track,
+                text,
+                muted,
+            );
 
-            // Stacked composition: kept | saved
-            ui.label(RichText::new(labels.saved_label).small().color(muted));
-            let bar_h = 18.0_f32;
-            let width = ui.available_width().max(120.0);
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(width, bar_h), Sense::hover());
-            let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, CornerRadius::same(6), Color32::from_rgb(241, 245, 249));
-            let keep_w = rect.width() * out_ratio;
-            let keep_rect = egui::Rect::from_min_size(rect.min, Vec2::new(keep_w, bar_h));
-            painter.rect_filled(keep_rect, CornerRadius::same(6), accent);
-            if pct > 0.0 {
-                let save_rect = egui::Rect::from_min_max(
-                    egui::pos2(rect.left() + keep_w, rect.top()),
-                    rect.max,
-                );
-                painter.rect_filled(save_rect, CornerRadius::same(6), ok.gamma_multiply(0.85));
-            }
+            ui.add_space(10.0);
             ui.horizontal(|ui| {
-                legend_chip(ui, accent, labels.output_label);
-                legend_chip(ui, ok, &format!("{} · {}", format_bytes(saved), labels.saved_label));
+                swatch(ui, accent);
+                ui.label(RichText::new(labels.output_label).small().color(muted));
+                ui.add_space(14.0);
+                swatch(ui, ok);
+                ui.label(RichText::new(labels.saved_label).small().color(muted));
             });
         });
     });
 }
 
-fn bar_row(
+fn metric_bar(
     ui: &mut egui::Ui,
     label: &str,
-    value: String,
+    value: &str,
     ratio: f32,
     fill: Color32,
+    track: Color32,
     text: Color32,
     muted: Color32,
 ) {
@@ -994,25 +1182,22 @@ fn bar_row(
             ui.label(RichText::new(value).strong().color(text));
         });
     });
-    let height = 14.0_f32;
-    let width = ui.available_width().max(120.0);
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, CornerRadius::same(5), Color32::from_rgb(241, 245, 249));
-    let filled = egui::Rect::from_min_size(
-        rect.min,
-        Vec2::new((rect.width() * ratio.clamp(0.0, 1.0)).max(3.0), height),
+    ui.add_space(3.0);
+    ui.add(
+        egui::ProgressBar::new(ratio.clamp(0.0, 1.0))
+            .desired_height(16.0)
+            .desired_width(ui.available_width())
+            .fill(fill)
+            .corner_radius(CornerRadius::same(5)),
     );
-    painter.rect_filled(filled, CornerRadius::same(5), fill);
+    // Subtle track hint behind empty bars
+    let _ = track;
 }
 
-fn legend_chip(ui: &mut egui::Ui, color: Color32, label: &str) {
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
-        ui.painter()
-            .rect_filled(rect, CornerRadius::same(2), color);
-        ui.label(RichText::new(label).small().color(Color32::from_rgb(71, 85, 105)));
-    });
+fn swatch(ui: &mut egui::Ui, color: Color32) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(2), color);
 }
 
 fn load_texture(
@@ -1070,16 +1255,17 @@ fn flag_button(ui: &mut egui::Ui, lang: Lang, selected: bool) -> egui::Response 
 fn paint_flag(painter: &egui::Painter, rect: egui::Rect, lang: Lang) {
     match lang {
         Lang::Gl => {
-            // Galicia: blue field + white diagonal band
-            painter.rect_filled(rect, CornerRadius::same(2), Color32::from_rgb(0, 82, 147));
+            // Galicia: white field + light-blue diagonal band (top-left → bottom-right)
+            painter.rect_filled(rect, CornerRadius::same(2), Color32::WHITE);
+            let light_blue = Color32::from_rgb(0, 152, 213);
             painter.add(egui::Shape::convex_polygon(
                 vec![
-                    egui::pos2(rect.left(), rect.top() + rect.height() * 0.22),
+                    egui::pos2(rect.left(), rect.top() + rect.height() * 0.18),
                     egui::pos2(rect.left(), rect.top() + rect.height() * 0.48),
-                    egui::pos2(rect.right(), rect.bottom() - rect.height() * 0.22),
+                    egui::pos2(rect.right(), rect.bottom() - rect.height() * 0.18),
                     egui::pos2(rect.right(), rect.bottom() - rect.height() * 0.48),
                 ],
-                Color32::WHITE,
+                light_blue,
                 Stroke::NONE,
             ));
         }

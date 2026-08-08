@@ -85,6 +85,9 @@ pub struct Strings {
     pub about_open_release: &'static str,
     pub about_open_commit: &'static str,
     pub about_license: &'static str,
+    pub overwrite_warn: &'static str,
+    pub overwrite_yes: &'static str,
+    pub overwrite_no: &'static str,
 }
 
 pub fn strings(lang: Lang) -> Strings {
@@ -131,6 +134,9 @@ pub fn strings(lang: Lang) -> Strings {
             about_open_release: "Abrir release",
             about_open_commit: "Ver commit",
             about_license: "Licenza GPL-3.0-or-later",
+            overwrite_warn: "Xa existe un ficheiro de saída co mesmo nome. Queres sobrescribilo?",
+            overwrite_yes: "Si, sobrescribir",
+            overwrite_no: "Cancelar",
         },
         Lang::Es => Strings {
             app_title: "Sergas ZIP Shrinker",
@@ -174,6 +180,9 @@ pub fn strings(lang: Lang) -> Strings {
             about_open_release: "Abrir release",
             about_open_commit: "Ver commit",
             about_license: "Licencia GPL-3.0-or-later",
+            overwrite_warn: "Ya existe un archivo de salida con el mismo nombre. ¿Quieres sobrescribirlo?",
+            overwrite_yes: "Sí, sobrescribir",
+            overwrite_no: "Cancelar",
         },
         Lang::En => Strings {
             app_title: "Sergas ZIP Shrinker",
@@ -217,6 +226,9 @@ pub fn strings(lang: Lang) -> Strings {
             about_open_release: "Open release",
             about_open_commit: "View commit",
             about_license: "License GPL-3.0-or-later",
+            overwrite_warn: "An output file with the same name already exists. Overwrite it?",
+            overwrite_yes: "Yes, overwrite",
+            overwrite_no: "Cancel",
         },
         Lang::Fr => Strings {
             app_title: "Sergas ZIP Shrinker",
@@ -260,6 +272,9 @@ pub fn strings(lang: Lang) -> Strings {
             about_open_release: "Ouvrir la release",
             about_open_commit: "Voir le commit",
             about_license: "Licence GPL-3.0-or-later",
+            overwrite_warn: "Un fichier de sortie du même nom existe déjà. Le remplacer ?",
+            overwrite_yes: "Oui, remplacer",
+            overwrite_no: "Annuler",
         },
         Lang::Pt => Strings {
             app_title: "Sergas ZIP Shrinker",
@@ -303,6 +318,9 @@ pub fn strings(lang: Lang) -> Strings {
             about_open_release: "Abrir release",
             about_open_commit: "Ver commit",
             about_license: "Licença GPL-3.0-or-later",
+            overwrite_warn: "Já existe um ficheiro de saída com o mesmo nome. Pretende substituí-lo?",
+            overwrite_yes: "Sim, substituir",
+            overwrite_no: "Cancelar",
         },
     }
 }

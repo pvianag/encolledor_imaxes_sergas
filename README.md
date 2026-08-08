@@ -75,9 +75,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Ou crea unha **Release** na interface de GitHub: o workflow `Release` compila Linux, Windows e macOS e anexa os executábeis á páxina da release.
-
-Detalles en [`DISTRIBUTION.md`](DISTRIBUTION.md).
+O workflow `Release` usa o **mesmo toolchain** que en local (Rust **1.97.1**, `Cargo.lock`, Zig **0.13** + `cargo-zigbuild` para Windows). Detalles en [`DISTRIBUTION.md`](DISTRIBUTION.md).
 
 Configuración local: `imaxes_diag_shrinker.cfg` no cartafol de configuración do usuario.
 
