@@ -75,8 +75,8 @@ cargo run --release
 ### Publicar unha release (compilación automática multi-OS)
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 O workflow `Release` usa Rust **1.97.1** + `Cargo.lock`; Windows constrúese en `windows-latest` (MSVC). Detalles en [`DISTRIBUTION.md`](DISTRIBUTION.md).
