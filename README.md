@@ -61,9 +61,9 @@ Para abrir os estudos médicos do ZIP reducido, recoméndase [**Weasis**](https:
 
 > **Privacidade.** Gardar e controlar a propia información de saúde é un **dereito**. Debemos defendelo: non compartas estudos con datos persoais sen necesidade, e evita subir ZIP reais a Internet ou a repositorios públicos.
 
-## Idioma
+## Privacidade no repositorio
 
-Galego por defecto. Tamén: español, inglés, francés e portugués (bandeiras na ventá).
+Este repositorio **non contén** estudos clínicos nin ZIP reais de pacientes. Non subas mostras con datos persoais a GitHub. A confidencialidade dos datos de saúde é un dereito; protéxeos e non os expós innecesariamente.
 
 ## Desenvolvemento
 
@@ -83,9 +83,6 @@ O workflow `Release` usa Rust **1.97.1** + `Cargo.lock`; Windows constrúese en 
 
 Configuración local: `imaxes_diag_shrinker.cfg` no cartafol de configuración do usuario.
 
-## Privacidade no repositorio
-
-Este repositorio **non contén** estudos clínicos nin ZIP reais de pacientes. Non subas mostras con datos persoais a GitHub. A confidencialidade dos datos de saúde é un dereito; protéxeos e non os expós innecesariamente.
 
 ## Licenza
 
