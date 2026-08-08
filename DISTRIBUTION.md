@@ -4,15 +4,12 @@
 
 ```
 .
-├── .github/workflows/     # CI e releases multiplataforma
-│   ├── ci.yml
-│   └── release.yml
-├── assets/                # Logos (embebidos no binario)
-├── dist/                  # Executábeis listos (local, non commit)
+├── .github/workflows/
+│   ├── ci.yml             # Tests en push/PR
+│   └── release.yml        # Compilación multi-OS → assets da Release
+├── assets/
+├── dist/                  # Saída local (non vai a git)
 ├── scripts/
-│   ├── package-all.sh     # Empaqueta Linux (+ Windows con Zig)
-│   ├── package-linux.sh
-│   └── package-release.md
 ├── src/
 ├── Cargo.toml
 ├── LICENSE
@@ -21,7 +18,7 @@
 
 ## Que descargan os usuarios
 
-Na [páxina de Releases](../../releases) de GitHub, só estes ficheiros:
+Na [última release](https://github.com/pvianag/encolledor_imaxes_sergas/releases/latest):
 
 | Plataforma | Executábel |
 |---|---|
@@ -30,29 +27,39 @@ Na [páxina de Releases](../../releases) de GitHub, só estes ficheiros:
 | macOS Intel | `sergas-zip-shrinker-macos-x86_64` |
 | macOS Apple Silicon | `sergas-zip-shrinker-macos-aarch64` |
 
-Non hai instalador nin dependencias externas. En Linux: `chmod +x` e executar. En macOS pode facer falta permitir a app en *Seguridade e privacidade*.
+Enlaces directos (sempre a última versión) no [README](README.md#descarga-usuarios).
 
-## Como publicar unha release
+## Como se publican os binarios (GitHub Actions)
+
+O workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) actívase cando:
+
+1. Empuxas unha etiqueta `v*` (`git tag v1.0.0 && git push origin v1.0.0`), ou
+2. Publicas unha **Release** na UI de GitHub, ou
+3. Executas manualmente **Actions → Release → Run workflow** (indicando a etiqueta).
+
+En cada caso:
+
+1. Compila en Ubuntu, Windows e macOS (Intel + Apple Silicon).
+2. Xera os executábeis e checksums `.sha256`.
+3. Crea/actualiza a GitHub Release e **anexa os assets** para descarga.
+
+## Publicar unha release
 
 ```bash
-# 1) Empaquetado local opcional (Linux + Windows neste host)
-./scripts/package-all.sh
-
-# 2) Commit, push, etiqueta
-git add -A
-git commit -m "Release v1.0.0"
+git checkout main
+git pull
+# asegúrate de que Cargo.lock está commitado
 git tag v1.0.0
-git push origin main --tags
+git push origin v1.0.0
 ```
 
-O workflow `Release` compila en runners nativos (Ubuntu, Windows, macOS Intel, macOS ARM) e anexa os executábeis á release de GitHub.
+Despois abre a release en:  
+https://github.com/pvianag/encolledor_imaxes_sergas/releases/latest
 
-Tamén: **Actions → Release → Run workflow** (sen etiqueta, só artefacts; coa etiqueta `v*` crea a release).
+## Empaquetado local (opcional)
 
-## Compilación local
+```bash
+./scripts/package-all.sh   # Linux + Windows → dist/
+```
 
-| OS | Comando |
-|---|---|
-| Linux | `cargo build --release --bin sergas-zip-shrinker` |
-| Windows (desde Linux) | `cargo zigbuild --release --bin sergas-zip-shrinker --target x86_64-pc-windows-gnu` |
-| macOS | Compilar en macOS ou via GitHub Actions (precisa SDK de Apple) |
+macOS require runner de Apple (ou SDK); úsase o workflow de GitHub.
