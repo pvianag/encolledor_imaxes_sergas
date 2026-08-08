@@ -11,7 +11,7 @@ OUT_DIR="${ROOT}/dist/v${VERSION}"
 NAME="sergas-zip-shrinker-linux-x86_64"
 
 echo "==> Building release (linux-x86_64)"
-cargo build --release --locked --bin sergas-zip-shrinker
+cargo build --release --bin sergas-zip-shrinker
 
 mkdir -p "${OUT_DIR}"
 cp -f "target/release/sergas-zip-shrinker" "${OUT_DIR}/${NAME}"

@@ -13,6 +13,7 @@ use std::thread;
 
 const SERGAS_LOGO_PNG: &[u8] = include_bytes!("../assets/sergas_logo.png");
 const RADIOGRAPHY_PNG: &[u8] = include_bytes!("../assets/radiography.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../assets/app_icon.png");
 
 #[derive(Debug, Clone)]
 struct QueueItem {
@@ -59,6 +60,7 @@ pub struct ShrinkApp {
     cancel: Arc<AtomicBool>,
     sergas_logo: Option<TextureHandle>,
     radiography: Option<TextureHandle>,
+    app_icon: Option<TextureHandle>,
 }
 
 impl ShrinkApp {
@@ -69,6 +71,7 @@ impl ShrinkApp {
 
         let sergas_logo = load_texture(&cc.egui_ctx, "sergas_logo", SERGAS_LOGO_PNG, false);
         let radiography = load_texture(&cc.egui_ctx, "radiography", RADIOGRAPHY_PNG, true);
+        let app_icon = load_texture(&cc.egui_ctx, "app_icon", APP_ICON_PNG, false);
 
         Self {
             config,
@@ -84,6 +87,7 @@ impl ShrinkApp {
             cancel: Arc::new(AtomicBool::new(false)),
             sergas_logo,
             radiography,
+            app_icon,
         }
     }
 
@@ -331,8 +335,17 @@ impl eframe::App for ShrinkApp {
 
                 ui.horizontal(|ui| {
                     ui.horizontal(|ui| {
+                        if let Some(tex) = &self.app_icon {
+                            ui.add(
+                                egui::Image::new(tex)
+                                    .fit_to_exact_size(Vec2::splat(48.0))
+                                    .corner_radius(CornerRadius::same(10))
+                                    .sense(Sense::hover()),
+                            );
+                            ui.add_space(8.0);
+                        }
                         if let Some(tex) = &self.sergas_logo {
-                            let logo_h = 52.0_f32;
+                            let logo_h = 48.0_f32;
                             let aspect = tex.size_vec2().x / tex.size_vec2().y.max(1.0);
                             let logo_w = logo_h * aspect;
                             ui.add(
@@ -342,7 +355,7 @@ impl eframe::App for ShrinkApp {
                             );
                             ui.add_space(10.0);
                             ui.vertical(|ui| {
-                                ui.add_space(6.0);
+                                ui.add_space(4.0);
                                 ui.label(
                                     RichText::new("ZIP Shrinker")
                                         .color(accent)
@@ -502,7 +515,7 @@ impl eframe::App for ShrinkApp {
 
                 ui.add_space(10.0);
 
-                // Analysis card
+                // Analysis card + size diagram
                 let (input, est_out, saved, keep, dropc, all_ready) = self.totals();
                 let analyzing_any = self.queue.iter().any(|q| q.analyzing);
 
@@ -512,53 +525,32 @@ impl eframe::App for ShrinkApp {
                     .corner_radius(CornerRadius::same(10))
                     .inner_margin(Margin::same(14))
                     .show(ui, |ui| {
-                        ui.columns(3, |cols| {
-                            cols[0].vertical(|ui| {
-                                ui.label(RichText::new(t.input_size).color(muted).small());
-                                ui.label(
-                                    RichText::new(format_bytes(input))
-                                        .size(20.0)
-                                        .strong()
-                                        .color(text),
-                                );
-                            });
-                            cols[1].vertical(|ui| {
-                                ui.label(RichText::new(t.est_output).color(muted).small());
-                                ui.label(
-                                    RichText::new(format_bytes(est_out))
-                                        .size(20.0)
-                                        .strong()
-                                        .color(accent),
-                                );
-                            });
-                            cols[2].vertical(|ui| {
-                                ui.label(RichText::new(t.est_saved).color(muted).small());
-                                let pct = if input > 0 {
-                                    (saved as f64 / input as f64) * 100.0
-                                } else {
-                                    0.0
-                                };
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{} ({:.0}%)",
-                                        format_bytes(saved),
-                                        pct
-                                    ))
-                                    .size(20.0)
-                                    .strong()
-                                    .color(ok),
-                                );
-                            });
-                        });
-                        ui.add_space(6.0);
+                        size_diagram(
+                            ui,
+                            SizeDiagramLabels {
+                                input_label: t.input_size,
+                                output_label: t.est_output,
+                                saved_label: t.est_saved,
+                            },
+                            input,
+                            est_out,
+                            saved,
+                            accent,
+                            ok,
+                            muted,
+                            text,
+                        );
+                        ui.add_space(8.0);
                         ui.horizontal(|ui| {
                             ui.label(
                                 RichText::new(format!("{}: {keep}", t.keep_count)).color(muted),
                             );
+                            ui.separator();
                             ui.label(
                                 RichText::new(format!("{}: {dropc}", t.drop_count)).color(muted),
                             );
                             if analyzing_any {
+                                ui.separator();
                                 ui.label(RichText::new(t.analyzing).color(accent));
                             }
                         });
@@ -611,20 +603,30 @@ impl eframe::App for ShrinkApp {
                         let deleted = *deleted;
                         let total_in: u64 = results.iter().map(|r| r.input_size).sum();
                         let total_out: u64 = results.iter().map(|r| r.output_size).sum();
-                        let saved = total_in.saturating_sub(total_out);
+                        let saved_n = total_in.saturating_sub(total_out);
                         ui.label(RichText::new(t.done).color(ok).strong().size(16.0));
-                        ui.label(format!(
-                            "{}: {} · {}: {} ({:.0}%)",
-                            t.actual_output,
-                            format_bytes(total_out),
-                            t.actual_saved,
-                            format_bytes(saved),
-                            if total_in > 0 {
-                                saved as f64 / total_in as f64 * 100.0
-                            } else {
-                                0.0
-                            }
-                        ));
+                        Frame::new()
+                            .fill(panel)
+                            .stroke(Stroke::new(1.0_f32, Color32::from_rgb(203, 213, 225)))
+                            .corner_radius(CornerRadius::same(10))
+                            .inner_margin(Margin::same(12))
+                            .show(ui, |ui| {
+                                size_diagram(
+                                    ui,
+                                    SizeDiagramLabels {
+                                        input_label: t.input_size,
+                                        output_label: t.actual_output,
+                                        saved_label: t.actual_saved,
+                                    },
+                                    total_in,
+                                    total_out,
+                                    saved_n,
+                                    accent,
+                                    ok,
+                                    muted,
+                                    text,
+                                );
+                            });
                         if deleted {
                             ui.label(RichText::new(t.delete_yes).color(muted).small());
                         }
@@ -677,6 +679,168 @@ impl eframe::App for ShrinkApp {
             ctx.request_repaint_after(std::time::Duration::from_millis(50));
         }
     }
+}
+
+struct SizeDiagramLabels {
+    input_label: &'static str,
+    output_label: &'static str,
+    saved_label: &'static str,
+}
+
+/// Comparative size chart: input bar vs output bar + savings ring.
+fn size_diagram(
+    ui: &mut egui::Ui,
+    labels: SizeDiagramLabels,
+    input: u64,
+    output: u64,
+    saved: u64,
+    accent: Color32,
+    ok: Color32,
+    muted: Color32,
+    text: Color32,
+) {
+    let pct = if input > 0 {
+        saved as f32 / input as f32
+    } else {
+        0.0
+    };
+    let out_ratio = if input > 0 {
+        (output as f32 / input as f32).clamp(0.02, 1.0)
+    } else {
+        0.0
+    };
+
+    ui.horizontal(|ui| {
+        // Left: donut with % saved
+        let donut_size = Vec2::splat(96.0);
+        let (donut_rect, _) = ui.allocate_exact_size(donut_size, Sense::hover());
+        let painter = ui.painter_at(donut_rect);
+        let center = donut_rect.center();
+        let radius = donut_rect.width() * 0.42;
+        let stroke_w = 11.0_f32;
+
+        // Track
+        painter.circle_stroke(
+            center,
+            radius,
+            Stroke::new(stroke_w, Color32::from_rgb(226, 232, 240)),
+        );
+        // Arc for saved portion (egui doesn't have native arcs — approximate with many segments)
+        if pct > 0.001 {
+            let segments = 64;
+            let start = -std::f32::consts::FRAC_PI_2;
+            let sweep = pct.clamp(0.0, 1.0) * std::f32::consts::TAU;
+            let mut points = Vec::with_capacity(segments + 1);
+            for i in 0..=segments {
+                let a = start + sweep * (i as f32 / segments as f32);
+                points.push(egui::pos2(
+                    center.x + radius * a.cos(),
+                    center.y + radius * a.sin(),
+                ));
+            }
+            painter.add(egui::Shape::line(points, Stroke::new(stroke_w, ok)));
+        }
+        painter.text(
+            center - Vec2::new(0.0, 8.0),
+            egui::Align2::CENTER_CENTER,
+            format!("{:.0}%", pct * 100.0),
+            egui::FontId::proportional(22.0),
+            ok,
+        );
+        painter.text(
+            center + Vec2::new(0.0, 14.0),
+            egui::Align2::CENTER_CENTER,
+            labels.saved_label,
+            egui::FontId::proportional(10.0),
+            muted,
+        );
+
+        ui.add_space(14.0);
+
+        // Right: comparative bars
+        ui.vertical(|ui| {
+            ui.set_min_width(ui.available_width().max(180.0));
+
+            bar_row(
+                ui,
+                labels.input_label,
+                format_bytes(input),
+                1.0,
+                Color32::from_rgb(100, 116, 139),
+                text,
+                muted,
+            );
+            ui.add_space(8.0);
+            bar_row(
+                ui,
+                labels.output_label,
+                format_bytes(output),
+                out_ratio,
+                accent,
+                text,
+                muted,
+            );
+            ui.add_space(8.0);
+
+            // Stacked composition: kept | saved
+            ui.label(RichText::new(labels.saved_label).small().color(muted));
+            let bar_h = 18.0_f32;
+            let width = ui.available_width().max(120.0);
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(width, bar_h), Sense::hover());
+            let painter = ui.painter_at(rect);
+            painter.rect_filled(rect, CornerRadius::same(6), Color32::from_rgb(241, 245, 249));
+            let keep_w = rect.width() * out_ratio;
+            let keep_rect = egui::Rect::from_min_size(rect.min, Vec2::new(keep_w, bar_h));
+            painter.rect_filled(keep_rect, CornerRadius::same(6), accent);
+            if pct > 0.0 {
+                let save_rect = egui::Rect::from_min_max(
+                    egui::pos2(rect.left() + keep_w, rect.top()),
+                    rect.max,
+                );
+                painter.rect_filled(save_rect, CornerRadius::same(6), ok.gamma_multiply(0.85));
+            }
+            ui.horizontal(|ui| {
+                legend_chip(ui, accent, labels.output_label);
+                legend_chip(ui, ok, &format!("{} · {}", format_bytes(saved), labels.saved_label));
+            });
+        });
+    });
+}
+
+fn bar_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: String,
+    ratio: f32,
+    fill: Color32,
+    text: Color32,
+    muted: Color32,
+) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(label).small().color(muted));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(RichText::new(value).strong().color(text));
+        });
+    });
+    let height = 14.0_f32;
+    let width = ui.available_width().max(120.0);
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, CornerRadius::same(5), Color32::from_rgb(241, 245, 249));
+    let filled = egui::Rect::from_min_size(
+        rect.min,
+        Vec2::new((rect.width() * ratio.clamp(0.0, 1.0)).max(3.0), height),
+    );
+    painter.rect_filled(filled, CornerRadius::same(5), fill);
+}
+
+fn legend_chip(ui: &mut egui::Ui, color: Color32, label: &str) {
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(10.0), Sense::hover());
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(2), color);
+        ui.label(RichText::new(label).small().color(Color32::from_rgb(71, 85, 105)));
+    });
 }
 
 fn load_texture(

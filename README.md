@@ -2,11 +2,15 @@
 
 ![SERGAS](assets/sergas_logo.png)
 
+<p align="center">
+  <img src="assets/app_icon_256.png" alt="Sergas ZIP Shrinker icon" width="128" />
+</p>
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-teal.svg)](#compilar)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-teal.svg)](#descarga-usuarios)
 [![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 [![UI](https://img.shields.io/badge/UI-gl%20%7C%20es%20%7C%20en%20%7C%20fr%20%7C%20pt-informational.svg)](#idioma)
-[![Deps](https://img.shields.io/badge/runtime-sen%20dependencias-success.svg)](#uso)
+[![Deps](https://img.shields.io/badge/runtime-sen%20dependencias-success.svg)](#descarga-usuarios)
 
 Ferramenta de escritorio para **reducir os ZIP** descargados de **e-Saúde (SERGAS)** eliminando o visualizador Alma3D e outros ficheiros innecesarios. 
 O resultado é un ZIP máis pequeno con só o contido DICOM, apto para abrilo en visualizadores estándar como **Weasis**.
@@ -32,47 +36,43 @@ Para abrir os estudos médicos do ZIP reducido, recoméndase [**Weasis**](https:
 
 > **Privacidade.** Gardar e controlar a propia información de saúde é un **dereito**. Debemos defendelo: non compartas estudos con datos persoais sen necesidade, e evita subir ZIP reais a Internet ou a repositorios públicos.
 
-## Uso
+## Descarga (usuarios)
 
-```bash
-cargo run --release
-# ou
-./target/release/sergas-zip-shrinker
-```
+Na páxina de **[Releases](../../releases)** descarga **só o executábel** da túa plataforma. Sen instalador.
+
+| Plataforma | Ficheiro |
+|---|---|
+| Linux x86_64 | `sergas-zip-shrinker-linux-x86_64` |
+| Windows x86_64 | `sergas-zip-shrinker-windows-x86_64.exe` |
+| macOS Intel | `sergas-zip-shrinker-macos-x86_64` |
+| macOS Apple Silicon | `sergas-zip-shrinker-macos-aarch64` |
+
+- **Linux:** `chmod +x sergas-zip-shrinker-linux-x86_64 && ./sergas-zip-shrinker-linux-x86_64`
+- **Windows:** executar o `.exe`
+- **macOS:** `chmod +x` e abrir; se o sistema o bloquea, permite a app en *Seguridade e privacidade*
 
 Podes arrastrar **varios ZIP á vez**. Cada saída gárdase como `nome_reduced.zip` no mesmo cartafol.
 
-Binario autónomo: non precisa instalador nin librerías extra no equipo do usuario (no eixe compilado).
-
-Verificación local dun ZIP (non subir mostras clínicas ao repo):
-
-```bash
-cargo run --bin verify_sample -- ./o_teu_ficheiro.zip
-```
-
 ## Idioma
 
-Galego por defecto. Tamén: español, inglés, francés e portugués (selector na ventá).
+Galego por defecto. Tamén: español, inglés, francés e portugués (bandeiras na ventá).
 
-## Compilar
-
-Requisitos: [Rust](https://rustup.rs/) estable.
+## Desenvolvemento
 
 ```bash
-cargo build --release
+cargo run --release
+./scripts/package-all.sh          # Linux + Windows → dist/
 ```
 
-| Sistema | Binario |
-|---------|---------|
-| Linux   | `target/release/sergas-zip-shrinker` |
-| Windows | `target/release/sergas-zip-shrinker.exe` |
-| macOS   | `target/release/sergas-zip-shrinker` |
+Publicar release multi-OS (Linux, Windows, macOS Intel/ARM) en GitHub:
 
-### Notas multiplataforma
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
 
-- **Windows 7+ (x64)**, macOS e Linux.
-- En Linux poden facer falta paquetes de desenvolvemento X11/GTK para compilar (`libgtk-3-dev`, `libxcb-*-dev`, `libxkbcommon-dev`).
-- Configuración local: `sergas_shrink.cfg` no cartafol de configuración do usuario.
+Detalles en [`DISTRIBUTION.md`](DISTRIBUTION.md).
+
+Configuración local: `sergas_shrink.cfg` no cartafol de configuración do usuario.
 
 ## Privacidade no repositorio
 

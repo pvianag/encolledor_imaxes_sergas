@@ -19,6 +19,9 @@ dirs = "6"
 anyhow = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+[build-dependencies]
+winres = "0.1"
+
 [profile.release]
 lto = true
 codegen-units = 1
