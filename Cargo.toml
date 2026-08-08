@@ -1,0 +1,38 @@
+[package]
+name = "sergas-zip-shrinker"
+version = "1.0.0"
+edition = "2021"
+description = "Reduce Sergas e-Saúde Alma3D ZIP downloads to DICOM-only for Weasis and similar viewers"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+keywords = ["dicom", "sergas", "zip", "weasis"]
+categories = ["multimedia", "gui"]
+
+[dependencies]
+eframe = { version = "0.31", default-features = true, features = ["default_fonts", "glow"] }
+egui = "0.31"
+rfd = "0.15"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+dirs = "6"
+anyhow = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = "s"
+
+[lib]
+name = "sergas_zip_shrinker"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sergas-zip-shrinker"
+path = "src/main.rs"
+
+[[bin]]
+name = "verify_sample"
+path = "src/bin/verify_sample.rs"

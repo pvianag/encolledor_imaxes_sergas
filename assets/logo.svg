@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="160" viewBox="0 0 720 160" role="img" aria-label="Sergas ZIP Shrinker">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0e7490"/>
+      <stop offset="100%" stop-color="#155e75"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="160" rx="16" fill="url(#bg)"/>
+  <circle cx="78" cy="80" r="42" fill="#ecfeff" opacity="0.95"/>
+  <path d="M58 80h40M78 60v40" stroke="#0e7490" stroke-width="8" stroke-linecap="round"/>
+  <rect x="54" y="54" width="48" height="52" rx="8" fill="none" stroke="#0e7490" stroke-width="4"/>
+  <text x="140" y="72" fill="#ecfeff" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="34" font-weight="700">Sergas ZIP Shrinker</text>
+  <text x="140" y="108" fill="#cffafe" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18">Compatible con e-Saúde · Weasis</text>
+  <text x="140" y="134" fill="#a5f3fc" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">Ferramenta non oficial · sen afiliación ao SERGAS</text>
+</svg>

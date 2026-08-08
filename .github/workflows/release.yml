@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  APP_NAME: sergas-zip-shrinker
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: sergas-zip-shrinker-linux-x86_64
+            ext: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: sergas-zip-shrinker-windows-x86_64
+            ext: ".exe"
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: sergas-zip-shrinker-macos-x86_64
+            ext: ""
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact: sergas-zip-shrinker-macos-aarch64
+            ext: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux GUI deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libssl-dev pkg-config
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --locked --bin sergas-zip-shrinker --target ${{ matrix.target }}
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          SRC="target/${{ matrix.target }}/release/${APP_NAME}${{ matrix.ext }}"
+          DST="dist/${{ matrix.artifact }}${{ matrix.ext }}"
+          cp "$SRC" "$DST"
+          # Strip native binaries when possible (not on Windows MSVC the same way)
+          if [[ "${{ runner.os }}" != "Windows" ]]; then
+            strip "$DST" || true
+            chmod +x "$DST"
+          fi
+          cp LICENSE dist/LICENSE
+          # Checksums
+          cd dist
+          if command -v sha256sum >/dev/null; then
+            sha256sum "${{ matrix.artifact }}${{ matrix.ext }}" > "${{ matrix.artifact }}.sha256"
+          else
+            shasum -a 256 "${{ matrix.artifact }}${{ matrix.ext }}" > "${{ matrix.artifact }}.sha256"
+          fi
+          ls -lh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/${{ matrix.artifact }}${{ matrix.ext }}
+            dist/${{ matrix.artifact }}.sha256
+            dist/LICENSE
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Flatten assets
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          find release-assets -type f \( -name 'sergas-zip-shrinker-*' -o -name 'LICENSE' \) -exec cp -v {} out/ \;
+          ls -lah out
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+          draft: false
+          body: |
+            ## Sergas ZIP Shrinker
+
+            Descarga **só o executábel** da túa plataforma. Non precisa instalador nin dependencias.
+
+            | Plataforma | Ficheiro |
+            |---|---|
+            | Linux x86_64 | `sergas-zip-shrinker-linux-x86_64` |
+            | Windows x86_64 | `sergas-zip-shrinker-windows-x86_64.exe` |
+            | macOS Intel | `sergas-zip-shrinker-macos-x86_64` |
+            | macOS Apple Silicon | `sergas-zip-shrinker-macos-aarch64` |
+
+            Ferramenta non oficial · GPL-3.0-or-later

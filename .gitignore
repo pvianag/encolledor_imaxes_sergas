@@ -1,0 +1,24 @@
+# Build
+/target/
+**/*.rs.bk
+
+# Packaged releases (generated)
+/dist/
+
+# Local clinical samples — never commit real Sergas downloads
+*.zip
+!testdata/synthetic_*.zip
+sample/
+*.dcm
+DICOMDIR
+property.xml
+*_reduced.zip
+*.partial
+
+# Local config / IDE
+sergas_shrink.cfg
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.cargo-cache/
