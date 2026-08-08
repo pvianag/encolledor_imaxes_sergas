@@ -18,8 +18,8 @@ fn load_app_icon() -> Option<Arc<IconData>> {
 
 fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_inner_size([720.0, 620.0])
-        .with_min_inner_size([560.0, 480.0])
+        .with_inner_size([860.0, 780.0])
+        .with_min_inner_size([720.0, 640.0])
         .with_title("Sergas ZIP Shrinker")
         .with_drag_and_drop(true);
 

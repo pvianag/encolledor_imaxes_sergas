@@ -1,0 +1,4 @@
+# Pin the same Rust version for local builds and GitHub Actions.
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"
