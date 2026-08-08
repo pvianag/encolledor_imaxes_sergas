@@ -1,9 +1,7 @@
 # Sergas ZIP Shrinker
 
-![SERGAS](assets/sergas_logo.png)
-
 <p align="center">
-  <img src="assets/app_icon_256.png" alt="Sergas ZIP Shrinker icon" width="64" />
+  <img src="assets/sergas_logo.png" alt="SERGAS" width="200" />
 </p>
 
 [![Latest release](https://img.shields.io/github/v/release/pvianag/encolledor_imaxes_sergas?label=latest%20release&color=0e7490)](https://github.com/pvianag/encolledor_imaxes_sergas/releases/latest)
