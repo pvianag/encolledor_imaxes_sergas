@@ -74,7 +74,8 @@ jobs:
           rustc --version
           cargo --version
           zig version
-          cargo zigbuild --version
+          cargo zigbuild --help >/dev/null
+          echo "cargo-zigbuild: ok (${CARGO_ZIGBUILD_VERSION})"
           echo "CARGO_PKG_VERSION=$(grep -m1 '^version' Cargo.toml)"
 
       - name: Build Linux x86_64 (host, same as package-all.sh)
